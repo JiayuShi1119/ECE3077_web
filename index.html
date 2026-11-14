@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>*,*::before,*::after{box-sizing:border-box} body{margin:0}</style>
+<title>Insurance Risk Pooling</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: one column. The example, two knobs (n, ε), the resulting probability, one chart. */
+:root {
+  --bg: #F7F8FA; --surface: #FFFFFF; --ink: #1B2333; --muted: #5A6476; --line: #E2E6EC;
+  --navy: #003057; --gold-ink: #7A6A2E; --exact: #2A62A8; --bound: #9C8226; --dev: #C4532A;
+  --display: "Source Serif 4", Cambria, Georgia, serif;
+  --body: Inter, "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0C1626; --surface: #13223A; --ink: #E7ECF3; --muted: #9DA8BA; --line: #2A3D5A;
+  --navy: #9CC1EE; --gold-ink: #D7C68A; --exact: #4A8AD4; --bound: #A88A26; --dev: #F08A5D; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0C1626; --surface: #13223A; --ink: #E7ECF3; --muted: #9DA8BA; --line: #2A3D5A;
+  --navy: #9CC1EE; --gold-ink: #D7C68A; --exact: #4A8AD4; --bound: #A88A26; --dev: #F08A5D; color-scheme: dark; }
+
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.55 var(--body); }
+.wrap { max-width: 960px; margin: 0 auto; padding-block: 40px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 24px; }
+.eyebrow { font: 600 13px/1.3 var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--gold-ink); }
+h1 { font: 700 clamp(28px, 4.4vw, 42px)/1.15 var(--display); color: var(--navy); margin: 6px 0 0; text-wrap: balance; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 22px; min-width: 0; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.xbar { text-decoration: overline; }
+
+.example { display: flex; flex-wrap: wrap; gap: 12px 32px; align-items: baseline; font-size: 17px; }
+.example b { font-family: var(--mono); font-weight: 500; }
+
+.knobs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; }
+.knob { display: grid; gap: 8px; align-content: start; }
+.knob label { font-size: 14px; color: var(--muted); }
+.knob .big { font: 700 26px/1.1 var(--display); color: var(--navy); }
+input[type=range] { width: 100%; accent-color: var(--exact); }
+input[type=range]:focus-visible, button:focus-visible { outline: 3px solid var(--bound); outline-offset: 2px; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+button { font: 600 14px/1 var(--body); border-radius: 999px; padding: 9px 14px; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+button[aria-pressed="true"] { background: var(--navy); color: var(--bg); border-color: var(--navy); }
+
+.result { display: flex; flex-wrap: wrap; gap: 12px 40px; align-items: baseline; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+.result .k { font-size: 15px; color: var(--muted); }
+.result .v { font: 700 44px/1 var(--display); color: var(--dev); font-variant-numeric: tabular-nums; }
+.result .v.bound { font-size: 28px; color: var(--gold-ink); }
+
+.canvas-box { position: relative; height: 380px; }
+.legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 14px; color: var(--muted); margin-top: 10px; }
+.legend i { display: inline-block; width: 18px; height: 0; border-top: 3px solid var(--exact); vertical-align: 4px; margin-right: 6px; }
+.legend i.dash { border-top: 2px dashed var(--bound); }
+
+@media (max-width: 720px) { .knobs { grid-template-columns: minmax(0, 1fr); } .result .v { font-size: 36px; } }
+</style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">ECE 3077 · Weak Law of Large Numbers</div>
+    <h1>How many customers does an insurer need?</h1>
+  </header>
+
+  <div class="panel example" aria-label="Example">
+    <span>Net profit per customer: <b>+¥300</b> (prob 0.99), <b>−¥19,700</b> (prob 0.01)</span>
+    <span>μ = <b>¥100</b></span>
+    <span>σ² = <b>3,960,000</b></span>
+  </div>
+
+  <div class="panel">
+    <div class="knobs">
+      <div class="knob">
+        <label for="logn">Number of customers n</label>
+        <span class="big">n = <span id="nOut" class="num"></span></span>
+        <input id="logn" type="range" min="3" max="6" step="0.01" value="4">
+        <div class="chips" id="chips" role="group" aria-label="Preset numbers of customers"></div>
+      </div>
+      <div class="knob">
+        <label for="eps">Deviation ε (yuan)</label>
+        <span class="big">ε = <span id="epsOut" class="num"></span></span>
+        <input id="eps" type="range" min="5" max="100" step="5" value="20">
+      </div>
+    </div>
+    <div class="result" aria-live="polite">
+      <div><div class="k" id="kDev"></div><div class="v num" id="pDev"></div></div>
+      <div><div class="k">Chebyshev bound σ²/(nε²)</div><div class="v bound num" id="pCheb"></div></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="canvas-box"><canvas id="chart" role="img" aria-label="Deviation probability versus number of customers for the chosen epsilon"></canvas></div>
+    <div class="legend"><span><i></i>exact deviation probability</span><span><i class="dash"></i>Chebyshev bound 9900/n when ε = 20</span></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const PREM = 300, PAY = 20000, P = 0.01, MU = 100, VAR = PAY * PAY * P * (1 - P);
+  const PRESETS = [1000, 10000, 100000, 1000000];
+
+  // exact P(|X̄n − μ| ≥ ε): X̄n = 300 − 20000·K/n with K ~ Bin(n, 0.01)
+  const LG = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059,
+    12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+  function lgamma(x) {
+    if (x < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * x)) - lgamma(1 - x);
+    x -= 1; let a = LG[0]; const t = x + 7.5;
+    for (let i = 1; i < 9; i++) a += LG[i] / (x + i);
+    return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
+  }
+  const logPmf = (n, k) => lgamma(n + 1) - lgamma(k + 1) - lgamma(n - k + 1) + k * Math.log(P) + (n - k) * Math.log1p(-P);
+  function binomSum(n, a, b) {
+    a = Math.max(0, a); b = Math.min(n, b);
+    if (a > b) return 0;
+    const s = Math.min(b, Math.max(a, Math.floor((n + 1) * P))), r = P / (1 - P), t0 = Math.exp(logPmf(n, s));
+    let sum = t0, t = t0;
+    for (let k = s; k < b; k++) { t *= ((n - k) / (k + 1)) * r; sum += t; if (t < sum * 1e-17) break; }
+    t = t0;
+    for (let k = s; k > a; k--) { t *= (k / (n - k + 1)) / r; sum += t; if (t < sum * 1e-17) break; }
+    return Math.min(1, sum);
+  }
+  function pDev(n, eps) {
+    const e = eps / PAY;
+    const kLo = Math.floor(n * (P - e) + 1e-9) + 1, kHi = Math.ceil(n * (P + e) - 1e-9) - 1;
+    return Math.max(0, 1 - binomSum(n, kLo, kHi));
+  }
+  const pCheb = (n, eps) => Math.min(1, VAR / (n * eps * eps));
+
+  const pct = (x) => {
+    if (x <= 0) return "≈ 0%";
+    if (x >= 1) return "100%";
+    if (x < 1e-4) return "< 0.01%";
+    if (x < 0.1) return (x * 100).toFixed(2) + "%";
+    return (x * 100).toFixed(1) + "%";
+  };
+  const nfmt = (n) => n.toLocaleString("en-US");
+  const nShort = (v) => (v >= 1e6 ? v / 1e6 + "M" : v >= 1000 ? v / 1000 + "k" : String(v));
+  const getN = () => Math.round(Math.pow(10, +$("logn").value));
+  const getEps = () => +$("eps").value;
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+  const NS = [];
+  for (let i = 0; i <= 30; i++) NS.push(Math.round(Math.pow(10, 3 + i / 10)));
+
+  let chart;
+  function build() {
+    if (chart) chart.destroy();
+    const ink = css("--ink"), bg = css("--bg"), muted = css("--muted"), line = css("--line"), mono = css("--mono");
+    Chart.defaults.font.family = css("--body"); Chart.defaults.font.size = 13; Chart.defaults.color = muted;
+    chart = new Chart($("chart"), {
+      type: "line",
+      data: { datasets: [
+        { label: "current", data: [], type: "scatter", pointRadius: 7, pointHoverRadius: 8, backgroundColor: css("--dev"), borderColor: bg, borderWidth: 2, order: 0 },
+        { label: "exact", data: [], borderColor: css("--exact"), backgroundColor: css("--exact"), borderWidth: 2.5, pointRadius: 2.5, pointHoverRadius: 5, tension: 0.25, order: 1 },
+        { label: "Chebyshev bound", data: [], borderColor: css("--bound"), backgroundColor: css("--bound"), borderWidth: 2, borderDash: [6, 4], pointRadius: 0, pointHoverRadius: 4, order: 2 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false, parsing: false,
+        animation: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? false : { duration: 200 },
+        interaction: { mode: "nearest", axis: "x", intersect: false },
+        scales: {
+          x: { type: "logarithmic", min: 1000, max: 1e6, border: { color: line },
+               grid: { color: (c) => ([1e3, 1e4, 1e5, 1e6].includes(c.tick && c.tick.value) ? line : "transparent") },
+               ticks: { maxRotation: 0, autoSkip: false, callback: (v) => ([1e3, 1e4, 1e5, 1e6].includes(v) ? nShort(v) : ""), font: { family: mono, size: 12 } },
+               title: { display: true, text: "number of customers n (log scale)", color: muted } },
+          y: { min: 0, max: 1, grid: { color: line }, border: { display: false },
+               ticks: { stepSize: 0.25, callback: (v) => Math.round(v * 100) + "%", font: { family: mono, size: 12 } },
+               title: { display: true, text: "deviation probability", color: muted } } },
+        plugins: {
+          legend: { display: false },
+          tooltip: { backgroundColor: ink, titleColor: bg, bodyColor: bg, bodyFont: { family: mono }, padding: 10, cornerRadius: 6,
+            filter: (it) => it.datasetIndex !== 0,
+            callbacks: { title: (it) => "n = " + nfmt(Math.round(it[0].raw.x)) + ", ε = ¥" + getEps(), label: (it) => it.dataset.label + ": " + pct(it.raw.y) } } } },
+    });
+    update();
+  }
+
+  function update() {
+    const n = getN(), eps = getEps();
+    $("nOut").textContent = nfmt(n); $("epsOut").textContent = "¥" + eps;
+    $("kDev").innerHTML = `P( |<span class="xbar">X</span><sub>n</sub> − 100| ≥ ${eps} )`;
+    const pd = pDev(n, eps);
+    $("pDev").textContent = pct(pd);
+    $("pCheb").textContent = pCheb(n, eps) >= 1 ? "≥ 1 (no information)" : "≤ " + pct(pCheb(n, eps));
+    const d = chart.data.datasets;
+    d[0].data = [{ x: n, y: pd }];
+    d[1].data = NS.map((k) => ({ x: k, y: pDev(k, eps) }));
+    d[2].data = NS.map((k) => ({ x: k, y: pCheb(k, eps) }));
+    document.querySelector(".legend i.dash").parentElement.lastChild.textContent = `Chebyshev bound σ²/(nε²) = ${Math.round(VAR / (eps * eps)).toLocaleString("en-US")}/n`;
+    chart.update();
+    [...$("chips").children].forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.n === n)));
+  }
+
+  PRESETS.forEach((n) => {
+    const b = document.createElement("button"); b.type = "button"; b.dataset.n = n; b.textContent = nShort(n);
+    b.addEventListener("click", () => { $("logn").value = Math.log10(n); update(); });
+    $("chips").appendChild(b);
+  });
+  $("logn").addEventListener("input", update);
+  $("eps").addEventListener("input", update);
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", build);
+  new MutationObserver(build).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  build();
+})();
+</script>
+</body>
+</html>
