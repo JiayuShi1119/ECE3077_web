@@ -6,4 +6,4 @@ Example: each customer pays a 300 yuan premium; with probability 1% the insurer 
 
 Pick the number of customers n and the deviation epsilon to see the exact probability P(|mean profit - 100| >= epsilon) and the Chebyshev bound sigma^2/(n epsilon^2).
 
-Live page: https://jiayushi1119.github.io/lln-insurance-demo/
+Live page: https://jiayushi1119.github.io/ECE3077_web/
